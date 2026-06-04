@@ -6,7 +6,7 @@ from services.market import (
     get_market_indices, get_global_indices,
     get_top_sectors, get_bottom_sectors,
 )
-from services.news import get_finance_news, get_hot_topics, get_us_news, get_global_news
+from services.news import get_finance_news, get_us_news, get_global_news
 
 
 def _fmt_chg(value) -> str:
@@ -17,6 +17,28 @@ def _fmt_chg(value) -> str:
         return str(value)
 
 
+def _news_link(title: str, url: str) -> str:
+    """生成新闻超链接，无URL时返回纯文本"""
+    if url:
+        return f"- [{title}]({url})"
+    return f"- {title}"
+
+
+def _dedup_news(*news_lists: list[dict]) -> list[list[dict]]:
+    """跨列表去重（按标题），保持各列表独立"""
+    seen_titles = set()
+    result = []
+    for lst in news_lists:
+        deduped = []
+        for item in lst:
+            t = item["title"]
+            if t not in seen_titles:
+                seen_titles.add(t)
+                deduped.append(item)
+        result.append(deduped)
+    return result
+
+
 def generate_morning_briefing() -> tuple[str, str]:
     """生成上午简报（盘前/开盘）"""
     date_str = today_str()
@@ -24,14 +46,15 @@ def generate_morning_briefing() -> tuple[str, str]:
 
     indices = get_market_indices()
     global_idx = get_global_indices()
-    hot_topics = get_hot_topics(8)
     news = get_finance_news(3)
     us_news = get_us_news(3)
     global_news = get_global_news(3)
 
+    # 跨分类去重
+    news, us_news, global_news = _dedup_news(news, us_news, global_news)
+
     lines = [f"## 投资早报 {date_str}\n"]
 
-    # 全球指数（放在最前面）
     lines.append("### 全球指数")
     if global_idx:
         for idx in global_idx:
@@ -41,7 +64,6 @@ def generate_morning_briefing() -> tuple[str, str]:
         lines.append("- 暂无数据")
     lines.append("")
 
-    # A股指数
     lines.append("### A股指数")
     if indices:
         for idx in indices:
@@ -51,30 +73,23 @@ def generate_morning_briefing() -> tuple[str, str]:
         lines.append("- 暂无数据")
     lines.append("")
 
-    # 热搜
-    lines.append("### 财经热搜")
-    if hot_topics:
-        for i, topic in enumerate(hot_topics, 1):
-            lines.append(f"{i}. {topic}")
-    else:
-        lines.append("- 暂无数据")
-    lines.append("")
-
-    # 新闻
-    lines.append("### 要闻速览")
-    for item in news:
-        lines.append(f"- {item['title']}")
-    if us_news:
+    if news:
+        lines.append("### 要闻速览")
+        for item in news:
+            lines.append(_news_link(item["title"], item.get("url", "")))
         lines.append("")
+
+    if us_news:
         lines.append("### 美股动态")
         for item in us_news:
-            lines.append(f"- {item['title']}")
-    if global_news:
+            lines.append(_news_link(item["title"], item.get("url", "")))
         lines.append("")
+
+    if global_news:
         lines.append("### 全球市场")
         for item in global_news:
-            lines.append(f"- {item['title']}")
-    lines.append("")
+            lines.append(_news_link(item["title"], item.get("url", "")))
+        lines.append("")
 
     lines.append(f"> 生成时间: {now_str()}")
     return title, "\n".join(lines)
@@ -93,9 +108,10 @@ def generate_afternoon_briefing() -> tuple[str, str]:
     us_news = get_us_news(3)
     global_news = get_global_news(3)
 
+    news, us_news, global_news = _dedup_news(news, us_news, global_news)
+
     lines = [f"## 投资晚报 {date_str}\n"]
 
-    # 全球指数
     lines.append("### 全球指数")
     if global_idx:
         for idx in global_idx:
@@ -105,7 +121,6 @@ def generate_afternoon_briefing() -> tuple[str, str]:
         lines.append("- 暂无数据")
     lines.append("")
 
-    # A股收盘
     lines.append("### A股收盘")
     if indices:
         for idx in indices:
@@ -115,7 +130,6 @@ def generate_afternoon_briefing() -> tuple[str, str]:
         lines.append("- 暂无数据")
     lines.append("")
 
-    # 行业板块
     lines.append("### 领涨行业")
     for s in top_sectors:
         chg = _fmt_chg(s["change_pct"])
@@ -130,21 +144,23 @@ def generate_afternoon_briefing() -> tuple[str, str]:
         lines.append(f"- {s['name']} ({chg}){lead}")
     lines.append("")
 
-    # 新闻
-    lines.append("### 要闻速览")
-    for item in news:
-        lines.append(f"- {item['title']}")
-    if us_news:
+    if news:
+        lines.append("### 要闻速览")
+        for item in news:
+            lines.append(_news_link(item["title"], item.get("url", "")))
         lines.append("")
+
+    if us_news:
         lines.append("### 美股动态")
         for item in us_news:
-            lines.append(f"- {item['title']}")
-    if global_news:
+            lines.append(_news_link(item["title"], item.get("url", "")))
         lines.append("")
+
+    if global_news:
         lines.append("### 全球市场")
         for item in global_news:
-            lines.append(f"- {item['title']}")
-    lines.append("")
+            lines.append(_news_link(item["title"], item.get("url", "")))
+        lines.append("")
 
     lines.append(f"> 生成时间: {now_str()}")
     return title, "\n".join(lines)
