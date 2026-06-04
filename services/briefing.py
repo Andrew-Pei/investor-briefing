@@ -1,68 +1,57 @@
 """
-简报生成服务 - 将行情和新闻组装为简报内容
+简报生成服务 - A股+全球市场
 """
 from utils.date_utils import now_str, today_str
 from services.market import (
-    get_market_indices,
-    get_top_sectors,
-    get_bottom_sectors,
-    get_northbound_flow,
-    get_top_stock_flow,
+    get_market_indices, get_global_indices,
+    get_top_sectors, get_bottom_sectors,
 )
-from services.news import get_finance_news, get_hot_topics
+from services.news import get_finance_news, get_hot_topics, get_us_news, get_global_news
 
 
-def _format_change(value) -> str:
-    """格式化涨跌幅"""
+def _fmt_chg(value) -> str:
     try:
         v = float(value)
-        if v > 0:
-            return f"+{v:.2f}%"
-        return f"{v:.2f}%"
-    except (TypeError, ValueError):
-        return str(value)
-
-
-def _format_amount(value) -> str:
-    """格式化金额（亿）"""
-    try:
-        v = float(value)
-        if abs(v) >= 1e8:
-            return f"{v / 1e8:.2f}亿"
-        elif abs(v) >= 1e4:
-            return f"{v / 1e4:.2f}万"
-        return f"{v:.2f}"
+        return f"+{v:.2f}%" if v > 0 else f"{v:.2f}%"
     except (TypeError, ValueError):
         return str(value)
 
 
 def generate_morning_briefing() -> tuple[str, str]:
-    """
-    生成上午简报（盘前/开盘）
-    返回: (title, markdown_content)
-    """
+    """生成上午简报（盘前/开盘）"""
     date_str = today_str()
     title = f"投资早报 {date_str}"
 
-    # 获取数据
     indices = get_market_indices()
+    global_idx = get_global_indices()
     hot_topics = get_hot_topics(8)
-    news = get_finance_news(6)
+    news = get_finance_news(3)
+    us_news = get_us_news(3)
+    global_news = get_global_news(3)
 
-    # 组装内容
     lines = [f"## 投资早报 {date_str}\n"]
 
-    # 大盘指数
-    lines.append("### 大盘指数")
-    if indices:
-        for idx in indices:
-            chg = _format_change(idx["change_pct"])
-            lines.append(f"- **{idx['name']}** {idx['price']} ({chg})")
+    # 全球指数（放在最前面）
+    lines.append("### 全球指数")
+    if global_idx:
+        for idx in global_idx:
+            chg = _fmt_chg(idx["change_pct"])
+            lines.append(f"- **{idx['name']}** {idx['price']:,.2f} ({chg})")
     else:
         lines.append("- 暂无数据")
     lines.append("")
 
-    # 热搜话题
+    # A股指数
+    lines.append("### A股指数")
+    if indices:
+        for idx in indices:
+            chg = _fmt_chg(idx["change_pct"])
+            lines.append(f"- **{idx['name']}** {idx['price']:.2f} ({chg})")
+    else:
+        lines.append("- 暂无数据")
+    lines.append("")
+
+    # 热搜
     lines.append("### 财经热搜")
     if hot_topics:
         for i, topic in enumerate(hot_topics, 1):
@@ -71,95 +60,91 @@ def generate_morning_briefing() -> tuple[str, str]:
         lines.append("- 暂无数据")
     lines.append("")
 
-    # 重要新闻
+    # 新闻
     lines.append("### 要闻速览")
-    if news:
-        for item in news[:6]:
-            title_text = item["title"]
-            lines.append(f"- {title_text}")
-    else:
-        lines.append("- 暂无数据")
+    for item in news:
+        lines.append(f"- {item['title']}")
+    if us_news:
+        lines.append("")
+        lines.append("### 美股动态")
+        for item in us_news:
+            lines.append(f"- {item['title']}")
+    if global_news:
+        lines.append("")
+        lines.append("### 全球市场")
+        for item in global_news:
+            lines.append(f"- {item['title']}")
     lines.append("")
 
     lines.append(f"> 生成时间: {now_str()}")
-
     return title, "\n".join(lines)
 
 
 def generate_afternoon_briefing() -> tuple[str, str]:
-    """
-    生成下午简报（盘后/收盘）
-    返回: (title, markdown_content)
-    """
+    """生成下午简报（盘后/收盘）"""
     date_str = today_str()
     title = f"投资晚报 {date_str}"
 
-    # 获取数据
     indices = get_market_indices()
+    global_idx = get_global_indices()
     top_sectors = get_top_sectors(5)
     bottom_sectors = get_bottom_sectors(5)
-    northbound = get_northbound_flow()
-    stock_flow = get_top_stock_flow(5)
-    news = get_finance_news(6)
+    news = get_finance_news(3)
+    us_news = get_us_news(3)
+    global_news = get_global_news(3)
 
-    # 组装内容
     lines = [f"## 投资晚报 {date_str}\n"]
 
-    # 大盘指数
-    lines.append("### 收盘指数")
+    # 全球指数
+    lines.append("### 全球指数")
+    if global_idx:
+        for idx in global_idx:
+            chg = _fmt_chg(idx["change_pct"])
+            lines.append(f"- **{idx['name']}** {idx['price']:,.2f} ({chg})")
+    else:
+        lines.append("- 暂无数据")
+    lines.append("")
+
+    # A股收盘
+    lines.append("### A股收盘")
     if indices:
         for idx in indices:
-            chg = _format_change(idx["change_pct"])
-            lines.append(f"- **{idx['name']}** {idx['price']} ({chg})")
+            chg = _fmt_chg(idx["change_pct"])
+            lines.append(f"- **{idx['name']}** {idx['price']:.2f} ({chg})")
     else:
         lines.append("- 暂无数据")
     lines.append("")
 
     # 行业板块
     lines.append("### 领涨行业")
-    if top_sectors:
-        for s in top_sectors:
-            chg = _format_change(s["change_pct"])
-            lines.append(f"- {s['name']} ({chg})")
-    else:
-        lines.append("- 暂无数据")
+    for s in top_sectors:
+        chg = _fmt_chg(s["change_pct"])
+        lead = f"（{s['lead_stock']}）" if s.get("lead_stock") else ""
+        lines.append(f"- {s['name']} ({chg}){lead}")
     lines.append("")
 
     lines.append("### 领跌行业")
-    if bottom_sectors:
-        for s in bottom_sectors:
-            chg = _format_change(s["change_pct"])
-            lines.append(f"- {s['name']} ({chg})")
-    else:
-        lines.append("- 暂无数据")
-    lines.append("")
-
-    # 北向资金
-    lines.append("### 北向资金")
-    lines.append(f"- 沪股通净流入: {northbound['sh_net']}")
-    lines.append(f"- 深股通净流入: {northbound['sz_net']}")
-    lines.append(f"- 合计净流入: {northbound['total']}")
-    lines.append("")
-
-    # 资金流入个股
-    lines.append("### 资金流入TOP5")
-    if stock_flow:
-        for s in stock_flow:
-            amt = _format_amount(s["net_amount"])
-            lines.append(f"- {s['name']}({s['code']}) 净流入 {amt}")
-    else:
-        lines.append("- 暂无数据")
+    for s in bottom_sectors:
+        chg = _fmt_chg(s["change_pct"])
+        lead = f"（{s['lead_stock']}）" if s.get("lead_stock") else ""
+        lines.append(f"- {s['name']} ({chg}){lead}")
     lines.append("")
 
     # 新闻
     lines.append("### 要闻速览")
-    if news:
-        for item in news[:6]:
+    for item in news:
+        lines.append(f"- {item['title']}")
+    if us_news:
+        lines.append("")
+        lines.append("### 美股动态")
+        for item in us_news:
             lines.append(f"- {item['title']}")
-    else:
-        lines.append("- 暂无数据")
+    if global_news:
+        lines.append("")
+        lines.append("### 全球市场")
+        for item in global_news:
+            lines.append(f"- {item['title']}")
     lines.append("")
 
     lines.append(f"> 生成时间: {now_str()}")
-
     return title, "\n".join(lines)

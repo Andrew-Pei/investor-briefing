@@ -1,130 +1,123 @@
 """
-市场行情服务 - 获取大盘指数、板块排行、北向资金等
+市场行情服务 - A股用新浪，全球指数用Yahoo Finance，行业板块用新浪
 """
-from src.config import MARKET_INDICES, SECTOR_RANK_URL, NORTHBOUND_URL, STOCK_FLOW_URL
-from utils.request import http_get
+import json
+import re
+
+import requests
+
+from src.config import A_SHARE_INDICES, GLOBAL_INDICES
+
+SINA_HEADERS = {
+    "Referer": "https://finance.sina.com.cn",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+}
 
 
 def get_market_indices() -> list[dict]:
     """
-    获取主要大盘指数行情
+    获取A股主要大盘指数行情（新浪接口）
+    返回: [{name, price, change, change_pct}, ...]
+    """
+    codes = ",".join(A_SHARE_INDICES.values())
+    code_to_name = {v: k for k, v in A_SHARE_INDICES.items()}
+    results = []
+    try:
+        url = f"https://hq.sinajs.cn/list={codes}"
+        resp = requests.get(url, headers=SINA_HEADERS, timeout=10)
+        resp.encoding = "gbk"
+        pattern = re.compile(r'var hq_str_(\w+)="(.+?)"')
+        for match in pattern.finditer(resp.text):
+            code, content = match.group(1), match.group(2)
+            if not content:
+                continue
+            parts = content.split(",")
+            try:
+                name = code_to_name.get(code, parts[0])
+                price = float(parts[1])
+                change = float(parts[2])
+                change_pct = float(parts[3])
+                results.append({
+                    "name": name, "price": price,
+                    "change": change, "change_pct": change_pct,
+                })
+            except (IndexError, ValueError):
+                continue
+    except Exception as e:
+        print(f"[A股指数获取失败] {e}")
+    return results
+
+
+def get_global_indices() -> list[dict]:
+    """
+    获取全球主要指数行情（Yahoo Finance）
     返回: [{name, price, change_pct}, ...]
     """
     results = []
-    secids = ",".join(MARKET_INDICES.values())
-    url = "https://push2.eastmoney.com/api/qt/ulist.np/get"
-    params = {
-        "secids": secids,
-        "fields": "f2,f3,f12,f14",
-        "_": "1",
-    }
-    data = http_get(url, params=params)
-    if data and data.get("data"):
-        for item in data["data"].get("diff", []):
+    for name, symbol in GLOBAL_INDICES.items():
+        try:
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1d"
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            data = resp.json()
+            meta = data["chart"]["result"][0]["meta"]
+            price = meta.get("regularMarketPrice", 0)
+            prev = meta.get("chartPreviousClose", meta.get("previousClose", 0))
+            change_pct = round((price - prev) / prev * 100, 2) if prev else 0
+            change = round(price - prev, 2) if prev else 0
             results.append({
-                "name": item.get("f14", ""),
-                "price": item.get("f2", 0),
-                "change_pct": item.get("f3", 0),
+                "name": name, "price": price,
+                "change": change, "change_pct": change_pct,
             })
+        except Exception:
+            continue
     return results
 
 
 def get_top_sectors(limit: int = 5) -> list[dict]:
     """
-    获取行业板块涨幅排行
-    返回: [{name, change_pct}, ...]
+    获取行业板块涨幅排行（新浪接口）
+    返回: [{name, change_pct, lead_stock}, ...]
     """
-    params = {
-        "pn": 1,
-        "pz": limit,
-        "po": 1,
-        "np": 1,
-        "fltt": 2,
-        "invt": 2,
-        "fid": "f3",
-        "fs": "m:90+t:2+f:!50",
-        "fields": "f2,f3,f12,f14",
-    }
-    data = http_get(SECTOR_RANK_URL, params=params)
-    results = []
-    if data and data.get("data"):
-        for item in data["data"].get("diff", []):
-            results.append({
-                "name": item.get("f14", ""),
-                "change_pct": item.get("f3", 0),
-            })
-    return results
+    sectors = _fetch_sina_sectors()
+    sectors.sort(key=lambda x: x["change_pct"], reverse=True)
+    return sectors[:limit]
 
 
 def get_bottom_sectors(limit: int = 5) -> list[dict]:
     """
-    获取行业板块跌幅排行
-    返回: [{name, change_pct}, ...]
+    获取行业板块跌幅排行（新浪接口）
+    返回: [{name, change_pct, lead_stock}, ...]
     """
-    params = {
-        "pn": 1,
-        "pz": limit,
-        "po": 0,
-        "np": 1,
-        "fltt": 2,
-        "invt": 2,
-        "fid": "f3",
-        "fs": "m:90+t:2+f:!50",
-        "fields": "f2,f3,f12,f14",
-    }
-    data = http_get(SECTOR_RANK_URL, params=params)
-    results = []
-    if data and data.get("data"):
-        for item in data["data"].get("diff", []):
-            results.append({
-                "name": item.get("f14", ""),
-                "change_pct": item.get("f3", 0),
-            })
-    return results
+    sectors = _fetch_sina_sectors()
+    sectors.sort(key=lambda x: x["change_pct"], reverse=False)
+    return sectors[:limit]
 
 
-def get_northbound_flow() -> dict:
-    """
-    获取北向资金净流入
-    返回: {sh_net: 沪股通净流入, sz_net: 深股通净流入, total: 合计}
-    """
-    data = http_get(NORTHBOUND_URL)
-    if data and data.get("data"):
-        try:
-            d = data["data"]
-            return {
-                "sh_net": d.get("hsv2", "N/A"),
-                "sz_net": d.get("ssv2", "N/A"),
-                "total": d.get("ht2", "N/A"),
-            }
-        except (KeyError, TypeError):
-            pass
-    return {"sh_net": "N/A", "sz_net": "N/A", "total": "N/A"}
-
-
-def get_top_stock_flow(limit: int = 5) -> list[dict]:
-    """
-    获取个股资金流入排行
-    返回: [{name, code, net_amount}, ...]
-    """
-    params = {
-        "pn": 1,
-        "pz": limit,
-        "po": 1,
-        "np": 1,
-        "fltt": 2,
-        "invt": 2,
-        "fid": "f62",
-        "fs": "b:BK0800,f:!50",
-        "fields": "f2,f3,f12,f14,f62",
-    }
-    data = http_get(STOCK_FLOW_URL, params=params)
-    results = []
-    if data and data.get("data"):
-        for item in data["data"].get("diff", []):
-            results.append({
-                "name": item.get("f14", ""),
-                "code": item.get("f12", ""),
-                "net_amount": item.get("f62", 0),
-            })
-    return results
+def _fetch_sina_sectors() -> list[dict]:
+    """从新浪获取全部行业板块数据"""
+    url = "https://vip.stock.finance.sina.com.cn/q/view/newSinaHy.php"
+    try:
+        resp = requests.get(url, headers=SINA_HEADERS, timeout=10)
+        resp.encoding = "gbk"
+        match = re.search(
+            r'var S_Finance_bankuai_sinaindustry\s*=\s*(\{.*\})', resp.text, re.DOTALL,
+        )
+        if not match:
+            return []
+        data = json.loads(match.group(1))
+        sectors = []
+        for key, val in data.items():
+            parts = val.split(",")
+            try:
+                name = parts[1]
+                change_pct = float(parts[5])
+                lead_stock = parts[12] if len(parts) > 12 else ""
+                sectors.append({
+                    "name": name, "change_pct": change_pct, "lead_stock": lead_stock,
+                })
+            except (IndexError, ValueError):
+                continue
+        return sectors
+    except Exception as e:
+        print(f"[行业板块获取失败] {e}")
+        return []
