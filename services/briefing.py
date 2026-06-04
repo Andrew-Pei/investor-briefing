@@ -4,7 +4,7 @@
 from utils.date_utils import now_str, today_str
 from services.market import (
     get_market_indices, get_global_indices,
-    get_top_sectors, get_bottom_sectors,
+    get_global_sectors, get_a_share_sectors,
 )
 from services.news import get_finance_news, get_us_news, get_global_news
 
@@ -18,25 +18,41 @@ def _fmt_chg(value) -> str:
 
 
 def _news_link(title: str, url: str) -> str:
-    """生成新闻超链接，无URL时返回纯文本"""
     if url:
         return f"- [{title}]({url})"
     return f"- {title}"
 
 
 def _dedup_news(*news_lists: list[dict]) -> list[list[dict]]:
-    """跨列表去重（按标题），保持各列表独立"""
-    seen_titles = set()
+    seen = set()
     result = []
     for lst in news_lists:
         deduped = []
         for item in lst:
             t = item["title"]
-            if t not in seen_titles:
-                seen_titles.add(t)
+            if t not in seen:
+                seen.add(t)
                 deduped.append(item)
         result.append(deduped)
     return result
+
+
+def _render_sectors(top: list[dict], bottom: list[dict], label: str, lines: list[str]):
+    """渲染行业板块涨跌"""
+    if not top and not bottom:
+        return
+    if top:
+        lines.append(f"### {label}领涨")
+        for s in top:
+            lead = f"（{s['lead_stock']}）" if s.get("lead_stock") else ""
+            lines.append(f"- {s['name']} ({_fmt_chg(s['change_pct'])}){lead}")
+        lines.append("")
+    if bottom:
+        lines.append(f"### {label}领跌")
+        for s in bottom:
+            lead = f"（{s['lead_stock']}）" if s.get("lead_stock") else ""
+            lines.append(f"- {s['name']} ({_fmt_chg(s['change_pct'])}){lead}")
+        lines.append("")
 
 
 def generate_morning_briefing() -> tuple[str, str]:
@@ -46,11 +62,11 @@ def generate_morning_briefing() -> tuple[str, str]:
 
     indices = get_market_indices()
     global_idx = get_global_indices()
+    g_top, g_bottom = get_global_sectors(3)
+    a_top, a_bottom = get_a_share_sectors(3)
     news = get_finance_news(3)
     us_news = get_us_news(3)
     global_news = get_global_news(3)
-
-    # 跨分类去重
     news, us_news, global_news = _dedup_news(news, us_news, global_news)
 
     lines = [f"## 投资早报 {date_str}\n"]
@@ -73,18 +89,19 @@ def generate_morning_briefing() -> tuple[str, str]:
         lines.append("- 暂无数据")
     lines.append("")
 
+    _render_sectors(g_top, g_bottom, "美股行业", lines)
+    _render_sectors(a_top, a_bottom, "A股行业", lines)
+
     if news:
         lines.append("### 要闻速览")
         for item in news:
             lines.append(_news_link(item["title"], item.get("url", "")))
         lines.append("")
-
     if us_news:
         lines.append("### 美股动态")
         for item in us_news:
             lines.append(_news_link(item["title"], item.get("url", "")))
         lines.append("")
-
     if global_news:
         lines.append("### 全球市场")
         for item in global_news:
@@ -102,12 +119,11 @@ def generate_afternoon_briefing() -> tuple[str, str]:
 
     indices = get_market_indices()
     global_idx = get_global_indices()
-    top_sectors = get_top_sectors(5)
-    bottom_sectors = get_bottom_sectors(5)
+    g_top, g_bottom = get_global_sectors(3)
+    a_top, a_bottom = get_a_share_sectors(3)
     news = get_finance_news(3)
     us_news = get_us_news(3)
     global_news = get_global_news(3)
-
     news, us_news, global_news = _dedup_news(news, us_news, global_news)
 
     lines = [f"## 投资晚报 {date_str}\n"]
@@ -130,32 +146,19 @@ def generate_afternoon_briefing() -> tuple[str, str]:
         lines.append("- 暂无数据")
     lines.append("")
 
-    lines.append("### 领涨行业")
-    for s in top_sectors:
-        chg = _fmt_chg(s["change_pct"])
-        lead = f"（{s['lead_stock']}）" if s.get("lead_stock") else ""
-        lines.append(f"- {s['name']} ({chg}){lead}")
-    lines.append("")
-
-    lines.append("### 领跌行业")
-    for s in bottom_sectors:
-        chg = _fmt_chg(s["change_pct"])
-        lead = f"（{s['lead_stock']}）" if s.get("lead_stock") else ""
-        lines.append(f"- {s['name']} ({chg}){lead}")
-    lines.append("")
+    _render_sectors(g_top, g_bottom, "美股行业", lines)
+    _render_sectors(a_top, a_bottom, "A股行业", lines)
 
     if news:
         lines.append("### 要闻速览")
         for item in news:
             lines.append(_news_link(item["title"], item.get("url", "")))
         lines.append("")
-
     if us_news:
         lines.append("### 美股动态")
         for item in us_news:
             lines.append(_news_link(item["title"], item.get("url", "")))
         lines.append("")
-
     if global_news:
         lines.append("### 全球市场")
         for item in global_news:

@@ -42,6 +42,21 @@ GLOBAL_INDICES = {
     "德国DAX": "^GDAXI",
 }
 
+# Yahoo Finance - 美股行业ETF
+US_SECTOR_ETFS = {
+    "科技": "XLK",
+    "金融": "XLF",
+    "医疗": "XLV",
+    "可选消费": "XLY",
+    "工业": "XLI",
+    "能源": "XLE",
+    "材料": "XLB",
+    "公用事业": "XLU",
+    "房地产": "XLRE",
+    "通信": "XLC",
+    "必需消费": "XLP",
+}
+
 # 新浪财经 - 新闻分类 lid
 NEWS_CATEGORIES = {
     "财经要闻": "2516",
