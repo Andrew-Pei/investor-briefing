@@ -30,7 +30,9 @@ def send_wechat(title: str, content: str) -> bool:
     }
 
     try:
-        resp = requests.post(url, data=data, timeout=10)
+        s = requests.Session()
+        s.trust_env = False
+        resp = s.post(url, data=data, timeout=10)
         result = resp.json()
         if result.get("code") == 0:
             print(f"[微信推送] 发送成功: {title}")

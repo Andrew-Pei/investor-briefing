@@ -19,8 +19,8 @@ if _env_file.exists():
 SERVERCHAN_SENDKEY = os.getenv("SERVERCHAN_SENDKEY", "")
 
 # ============ 定时配置 ============
-MORNING_BRIEFING_TIME = os.getenv("MORNING_BRIEFING_TIME", "08:30")
-AFTERNOON_BRIEFING_TIME = os.getenv("AFTERNOON_BRIEFING_TIME", "15:30")
+MORNING_BRIEFING_TIME = os.getenv("MORNING_BRIEFING_TIME", "08:00")
+AFTERNOON_BRIEFING_TIME = os.getenv("AFTERNOON_BRIEFING_TIME", "20:00")
 
 # ============ 数据源配置 ============
 # 新浪 - A股大盘指数
