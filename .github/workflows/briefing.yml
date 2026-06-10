@@ -2,10 +2,10 @@ name: Daily Investor Briefing
 
 on:
   schedule:
-    # 早报: UTC 00:00 = 北京时间 08:00
-    - cron: '0 0 * * *'
-    # 晚报: UTC 12:00 = 北京时间 20:00
-    - cron: '0 12 * * *'
+    # 早报: 提前到 UTC 21:00（北京 05:00）启动，等待到北京 08:00 执行
+    - cron: '0 21 * * *'
+    # 晚报: 提前到 UTC 09:00（北京 17:00）启动，等待到北京 20:00 执行
+    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       type:
@@ -15,7 +15,7 @@ on:
 
 jobs:
   morning:
-    if: github.event.inputs.type == 'morning' || (github.event_name == 'schedule' && github.event.schedule == '0 0 * * *')
+    if: github.event.inputs.type == 'morning' || (github.event_name == 'schedule' && github.event.schedule == '0 21 * * *')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,12 +23,30 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install requests APScheduler
+      - name: Wait until Beijing 08:00
+        run: |
+          TARGET_HOUR=8
+          TARGET_MIN=0
+          # 当前 UTC 时间
+          NOW=$(date -u +%s)
+          # 计算目标北京时间今天的秒数（UTC+8）
+          BEIJING_DATE=$(TZ=Asia/Shanghai date +%Y-%m-%d)
+          TARGET_SEC=$(TZ=Asia/Shanghai date -d "${BEIJING_DATE} ${TARGET_HOUR}:${TARGET_MIN}:00" +%s)
+          # 如果目标时间已过（cron 延迟超过7小时），直接执行
+          DIFF=$((TARGET_SEC - NOW))
+          if [ $DIFF -le 0 ]; then
+            echo "Target time already passed, running now"
+            exit 0
+          fi
+          echo "Waiting ${DIFF} seconds until Beijing ${TARGET_HOUR}:$(printf '%02d' $TARGET_MIN)..."
+          sleep $DIFF
       - run: python main.py now morning
         env:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          TZ: Asia/Shanghai
 
   afternoon:
-    if: github.event.inputs.type == 'afternoon' || (github.event_name == 'schedule' && github.event.schedule == '0 12 * * *')
+    if: github.event.inputs.type == 'afternoon' || (github.event_name == 'schedule' && github.event.schedule == '0 9 * * *')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +54,21 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install requests APScheduler
+      - name: Wait until Beijing 20:00
+        run: |
+          TARGET_HOUR=20
+          TARGET_MIN=0
+          NOW=$(date -u +%s)
+          BEIJING_DATE=$(TZ=Asia/Shanghai date +%Y-%m-%d)
+          TARGET_SEC=$(TZ=Asia/Shanghai date -d "${BEIJING_DATE} ${TARGET_HOUR}:${TARGET_MIN}:00" +%s)
+          DIFF=$((TARGET_SEC - NOW))
+          if [ $DIFF -le 0 ]; then
+            echo "Target time already passed, running now"
+            exit 0
+          fi
+          echo "Waiting ${DIFF} seconds until Beijing ${TARGET_HOUR}:$(printf '%02d' $TARGET_MIN)..."
+          sleep $DIFF
       - run: python main.py now afternoon
         env:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          TZ: Asia/Shanghai
