@@ -128,8 +128,10 @@ def _fetch_sina_sectors() -> list[dict]:
                 name = parts[1]
                 change_pct = float(parts[5])
                 lead_stock = parts[12] if len(parts) > 12 else ""
+                lead_code = parts[8] if len(parts) > 8 else ""
                 sectors.append({
-                    "name": name, "change_pct": change_pct, "lead_stock": lead_stock,
+                    "name": name, "change_pct": change_pct,
+                    "lead_stock": lead_stock, "lead_code": lead_code,
                 })
             except (IndexError, ValueError):
                 continue

@@ -13,7 +13,7 @@ def _fmt_chg(value) -> str:
     try:
         v = float(value)
         text = f"+{v:.2f}%" if v > 0 else f"{v:.2f}%"
-        color = "red" if v > 0 else ("green" if v < 0 else "inherit")
+        color = "warning" if v > 0 else ("info" if v < 0 else "comment")
         return f'<font color="{color}">{text}</font>'
     except (TypeError, ValueError):
         return str(value)
@@ -46,15 +46,28 @@ def _render_sectors(top: list[dict], bottom: list[dict], label: str, lines: list
     if top:
         lines.append(f"### {label}领涨")
         for s in top:
-            lead = f"（{s['lead_stock']}）" if s.get("lead_stock") else ""
+            lead = _format_lead_stock(s) 
             lines.append(f"- {s['name']} ({_fmt_chg(s['change_pct'])}){lead}")
         lines.append("")
     if bottom:
         lines.append(f"### {label}领跌")
         for s in bottom:
-            lead = f"（{s['lead_stock']}）" if s.get("lead_stock") else ""
+            lead = _format_lead_stock(s)
             lines.append(f"- {s['name']} ({_fmt_chg(s['change_pct'])}){lead}")
         lines.append("")
+
+
+def _format_lead_stock(sector: dict) -> str:
+    """格式化领涨股信息，同时显示名称和代码"""
+    name = sector.get("lead_stock", "")
+    code = sector.get("lead_code", "")
+    if name and code:
+        # 去掉代码前缀(szh/sh)中的市场标识，只保留6位数字
+        short_code = code[2:] if len(code) > 6 else code
+        return f"（{name}·{short_code}）"
+    elif name:
+        return f"（{name}）"
+    return ""
 
 
 def generate_morning_briefing() -> tuple[str, str]:
