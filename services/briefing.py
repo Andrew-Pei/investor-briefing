@@ -12,9 +12,7 @@ from services.news import get_finance_news, get_us_news, get_global_news
 def _fmt_chg(value) -> str:
     try:
         v = float(value)
-        text = f"+{v:.2f}%" if v > 0 else f"{v:.2f}%"
-        color = "warning" if v > 0 else ("info" if v < 0 else "comment")
-        return f'<font color="{color}">{text}</font>'
+        return f"+{v:.2f}%" if v > 0 else f"{v:.2f}%"
     except (TypeError, ValueError):
         return str(value)
 
